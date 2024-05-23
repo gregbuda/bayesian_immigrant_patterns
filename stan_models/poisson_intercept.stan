@@ -5,7 +5,7 @@ data {
   int<lower=0> j;          // number of census tracts
   //data
   array[N] int<lower=0> y;        // target
-  matrix[N, p] X; // matrix of all features
+  array[N] real X_pop; // census tract population
   //CAR
   int<lower=0> N_edges;
   array[N_edges] int<lower=1, upper=N> node1; // node1[i] adjacent to node2[i]
@@ -16,6 +16,7 @@ data {
 
 parameters {
   real beta0; // Intercept
+  real beta1; // Intercept
   vector[j] phi; // Structured (spatial) effect
   vector[j] theta; // Unstructured (heterogenous) effect
   real<lower=0> tau_theta; // Precision of heterogeneous effects
@@ -31,7 +32,7 @@ transformed parameters {
 model {
   // Likelihood
   for (n in 1:N) {
-    y[n] ~ poisson_log(beta0  + phi[cusecs_indx[n]] * sigma_phi
+    y[n] ~ poisson_log(beta0  + beta1 * X_pop[cusecs_indx[n]] + phi[cusecs_indx[n]] * sigma_phi
                   + theta[cusecs_indx[n]] * sigma_theta);
   }
   
@@ -41,6 +42,7 @@ model {
   
   // Priors
   beta0 ~ normal(0, 5);
+  beta1 ~ normal(0, 1);
   theta ~ normal(0, 1);
   tau_theta ~ gamma(3.2761, 1.81); // Carlin WinBUGS priors
   tau_phi ~ gamma(1, 1); // Carlin WinBUGS priors
@@ -50,7 +52,7 @@ generated quantities {
   // 1a) Likelihoods
   vector[N] log_lik;
   for (n in 1:N) {
-    log_lik[n] = poisson_log_lpmf(y[n] | beta0 + phi[cusecs_indx[n]] * sigma_phi
+    log_lik[n] = poisson_log_lpmf(y[n] | beta0 + beta1 * X_pop[cusecs_indx[n]] + phi[cusecs_indx[n]] * sigma_phi
                                 + theta[cusecs_indx[n]] * sigma_theta);
   }
   
@@ -63,13 +65,13 @@ generated quantities {
   // 2) Predictions for y
   int y_pred[N];
   for (n in 1:N) {
-    y_pred[n] = poisson_log_rng(beta0 + phi[cusecs_indx[n]] * sigma_phi
+    y_pred[n] = poisson_log_rng(beta0 + beta1 * X_pop[cusecs_indx[n]] + phi[cusecs_indx[n]] * sigma_phi
                                 + theta[cusecs_indx[n]] * sigma_theta);
   }
   
     // 3) Predictions for y without unstructured
   int y_pred_icar[N];
   for (n in 1:N) {
-    y_pred_icar[n] = poisson_log_rng(beta0 + phi[cusecs_indx[n]] * sigma_phi);
+    y_pred_icar[n] = poisson_log_rng(beta0 + beta1 * X_pop[cusecs_indx[n]] + phi[cusecs_indx[n]] * sigma_phi);
   }
 }
