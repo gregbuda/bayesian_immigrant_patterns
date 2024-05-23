@@ -16,7 +16,7 @@ library(readr)
 library(loo)
 theme_set(theme_bw())
 options(mc.cores = parallel::detectCores())
-setwd("C:/Users/gregb/Desktop/TFM")
+setwd("/Users/gregbuda/Downloads")
 
 
 
@@ -99,11 +99,12 @@ N_edges = nbs$N_edges;
 #2. Intercept and Random Effects model
 ##################################
 
+
 # for (country in c('Italia','Marruecos','China','Ecuador','Perú')) {
 # 
 #   X <- subset(df, cob==country)
 #   X <- X[, !names(X) %in% c("cusec","cusec_idx", "cob","cob_idx","population","pop_share","overall_density")]
-#   #X <- scale(X)
+#   X <- as.data.frame(scale(X))
 #   y <- subset(df, cob==country)$population
 # 
 #   #Model
@@ -113,7 +114,7 @@ N_edges = nbs$N_edges;
 #     j = j,
 #     p=ncol(X),
 #     #Data
-#     X = X,
+#     X_pop = X$census_total_pop,
 #     y = y,
 #     #CAR
 #     node1=node1,
@@ -124,10 +125,9 @@ N_edges = nbs$N_edges;
 #   )
 # 
 #   model <- stan("poisson_intercept.stan",  data = data_list, chains=4, thin=2,
-#                 iter=4000,  seed=1)
+#                 iter=4000,  seed=1, init = 0)
 #   save(model, file = paste0("./model_intercept/model_intercept_", country, ".Rdata"))
 # }
-
 
 
 
@@ -484,10 +484,20 @@ xlim <- c(0, 200)
 generated_quantities <- as.matrix(model, "y_pred")
 plot <-ppc_dens_overlay(y, generated_quantities,  xlim=c(0, 200))
 plot + xlim(xlim) 
+plot <- plot + theme(axis.title.x = element_text(size = 12)) 
+plot <- plot + theme(axis.text.x = element_text(size = 12))  
+plot <- plot + theme(legend.text = element_text(size = 12))
+plot <- plot + xlab("Immigrant Population in Census Tract")
+plot
 
 generated_quantities <- as.matrix(model, "y_pred_fixed_effects")
 plot <-ppc_dens_overlay(y, generated_quantities,  xlim=c(0, 200))
-plot + xlim(xlim) 
+plot <- plot + xlim(xlim) 
+plot <- plot + theme(axis.title.x = element_text(size = 12)) 
+plot <- plot + theme(axis.text.x = element_text(size = 12))  
+plot <- plot + theme(legend.text = element_text(size = 12))
+plot <- plot + xlab("Immigrant Population in Census Tract")
+plot
 
 dim(generated_quantities)
 
