@@ -178,11 +178,11 @@ N_edges = nbs$N_edges;
 binary_matrix <- matrix(NA, nrow = 3 * 5, ncol = 25)
 counter <- 1
 
-for (country in c('Italia','Marruecos','China','Ecuador','Peru')) {
+for (country in c('Italia','Marruecos','China','Ecuador','Perú')) {
   tau_values <- c(0.001, 0.1, 10)
   for (tau in tau_values) {
 
-    load(paste0("./stan_final_models/model_horseshoe/model_horseshoe_", country,"_tau",tau, ".Rdata"))
+    load(paste0("/Users/gregbuda/Desktop/TFM/model_horseshoe/model_horseshoe_", country,"_tau",tau, ".Rdata"))
     
     summary_stats <- summary(model)
     posterior_samples <- rstan::extract(model)
@@ -263,6 +263,52 @@ rowSums(as.matrix(binary_matrix[, 3:25]) == "TRUE")
 # 
 #   }
 # }
+
+
+#############################
+#4B Model without CAR: Only Fixed effects
+#############################
+
+for (country in c('Italia','Marruecos','China','Ecuador','Perú')) {
+  X <- subset(df, cob==country)
+  X <- X[, !names(X) %in% c("cusec","cusec_idx", "cob","cob_idx","population","pop_share","overall_density")]
+  X <- scale(X)
+  y <- subset(df, cob==country)$population
+
+  tau_values <- c(0.1)
+  for (tau in tau_values) {
+
+    #Relevant setup
+    setup_vector<-binary_matrix[binary_matrix$country == country & binary_matrix$tau == tau,]
+    #beta0 is significant?
+    beta0_sig <- as.logical(setup_vector[3])
+    #betas; which position indices are significant
+    sig_beta_positions <- which(as.logical(setup_vector[4:25]), arr.ind = TRUE)
+
+    j <- length(unique(df$cusec) )
+
+    #Iterate over 3 possible values of tau
+    data_list <- list(
+      #Dimensions
+      N = dim(X)[1],
+      j = j,
+      p=ncol(X),
+      #Data
+      X = X,
+      y = y,
+      #Indices
+      cusecs_indx = as.integer(subset(df, cob==country)$cusec_idx),
+      betas_to_estimate=as.integer(length(sig_beta_positions)),
+      parameter_indx = as.integer(sig_beta_positions),
+      sig_beta0=as.numeric(beta0_sig)
+    )
+
+    model <-  stan("poisson_fixed.stan", data = data_list, chains=4, thin=2,
+                   iter=4000,  seed=1, init = 0)
+    save(model, file = paste0("./model_fixed/model_fixed_", country,"_tau",tau, ".Rdata"))
+
+  }
+}
 
 
 
@@ -413,89 +459,73 @@ result
 
 #5.4 Predictives
 get_predictives <- function(model){
-  #Fixed model
-  generated_quantities <- as.array(model, "y_pred_fixed_effects")
-  all_spatial_units <- dim(generated_quantities)[3]
-  y_pred_all_units <- lapply(1:all_spatial_units, function(i) c(generated_quantities[, , i]))
-  fixed <- sapply(y_pred_all_units, mean)
-  #Fixed + ICAR model
-  generated_quantities <- as.array(model, "y_pred_fixed_and_icar")
-  all_spatial_units <- dim(generated_quantities)[3]
-  y_pred_all_units <- lapply(1:all_spatial_units, function(i) c(generated_quantities[, , i]))
-  fixed_icar <- sapply(y_pred_all_units, mean)
   #Full model
   generated_quantities <- as.array(model, "y_pred")
   all_spatial_units <- dim(generated_quantities)[3]
   y_pred_all_units <- lapply(1:all_spatial_units, function(i) c(generated_quantities[, , i]))
   full <- sapply(y_pred_all_units, mean)
-  preds <- data.frame(cusec= unique(df$cusec), pred_fixed = fixed, pred_fixed_icar = fixed_icar, pred_full = full)
+  preds <- data.frame(cusec= unique(df$cusec), pred_full = full)
+  return(preds)
+}
+
+get_predictives_fixed <- function(model){
+  #Full model
+  generated_quantities <- as.array(model, "y_pred_fixed_effects")
+  all_spatial_units <- dim(generated_quantities)[3]
+  y_pred_all_units <- lapply(1:all_spatial_units, function(i) c(generated_quantities[, , i]))
+  full <- sapply(y_pred_all_units, mean)
+  preds <- data.frame(cusec= unique(df$cusec), pred_full = full)
   return(preds)
 }
 
 
 #Italy
-load(paste0("./stan_final_models/model_car/model_car_italia_tau0.1.Rdata"))
+load(paste0("/Users/gregbuda/Desktop/TFM/model_car/model_car_italia_tau0.1.Rdata"))
 results <- get_predictives(model)
 results$real <- subset(df, cob=='Italia')$population
 results$census_total_pop <- subset(df, cob=='Italia')$census_total_pop
+load(paste0("./model_fixed/model_fixed_italia_tau0.1.Rdata"))
+results_fixed <- get_predictives_fixed(model)
+results$pred_fixed <- results_fixed$pred_full
 write.csv(results, file = "./predictives/preds_italy.csv", row.names = FALSE)
 
 
-#Marruecos
-load(paste0("./stan_final_models/model_car/model_car_marruecos_tau0.1.Rdata"))
-results <- get_predictives(model)
-results$real <- subset(df, cob=='Marruecos')$population
-results$census_total_pop <- subset(df, cob=='Marruecos')$census_total_pop
-write.csv(results, file = "./predictives/preds_morroco.csv", row.names = FALSE)
-
-#China
-load(paste0("./stan_final_models/model_car/model_car_china_tau0.001.Rdata"))
-results <- get_predictives(model)
-results$real <- subset(df, cob=='China')$population
-results$census_total_pop <- subset(df, cob=='China')$census_total_pop
-write.csv(results, file = "./predictives/preds_china.csv", row.names = FALSE)
-
 #Ecuador
-load(paste0("./stan_final_models/model_car/model_car_ecuador_tau0.1.Rdata"))
+load(paste0("/Users/gregbuda/Desktop/TFM/model_car/model_car_ecuador_tau0.1.Rdata"))
 results <- get_predictives(model)
 results$real <- subset(df, cob=='Ecuador')$population
 results$census_total_pop <- subset(df, cob=='Ecuador')$census_total_pop
+load(paste0("./model_fixed/model_fixed_ecuador_tau0.1.Rdata"))
+results_fixed <- get_predictives_fixed(model)
+results$pred_fixed <- results_fixed$pred_full
 write.csv(results, file = "./predictives/preds_ecuador.csv", row.names = FALSE)
 
-#Perú
-load(paste0("./stan_final_models/model_car/model_car_peru_tau0.1.Rdata"))
-results <- get_predictives(model)
-results$real <- subset(df, cob=='Perú')$population
-results$census_total_pop <- subset(df, cob=='Perú')$census_total_pop
-write.csv(results, file = "./predictives/preds_peru.csv", row.names = FALSE)
-
-
-ppc_dens_overlay(y, yrep_poisson[1:50, ])
 
 
 
 #5.5 Posterior Predictive Check
 
-#Perú
-load(paste0("./stan_final_models/model_car/model_car_peru_tau0.1.Rdata"))
-y <- subset(df, cob=='Perú')$population
+#Ecuador
+load(paste0("/Users/gregbuda/Desktop/TFM/model_car/model_car_ecuador_tau0.1.Rdata"))
+y <- subset(df, cob=='Ecuador')$population
 xlim <- c(0, 200)
 
 generated_quantities <- as.matrix(model, "y_pred")
 plot <-ppc_dens_overlay(y, generated_quantities,  xlim=c(0, 200))
-plot + xlim(xlim) 
-plot <- plot + theme(axis.title.x = element_text(size = 12)) 
-plot <- plot + theme(axis.text.x = element_text(size = 12))  
-plot <- plot + theme(legend.text = element_text(size = 12))
-plot <- plot + xlab("Immigrant Population in Census Tract")
+plot <- plot + xlim(xlim) +
+  theme(axis.title.x = element_text(size = 18),
+        axis.text.x = element_text(size = 18),
+        legend.text = element_text(size = 20)) +
+  xlab("Immigrant Population in Census Tract")
 plot
 
+load(paste0("./model_fixed/model_fixed_ecuador_tau0.1.Rdata"))
 generated_quantities <- as.matrix(model, "y_pred_fixed_effects")
 plot <-ppc_dens_overlay(y, generated_quantities,  xlim=c(0, 200))
 plot <- plot + xlim(xlim) 
-plot <- plot + theme(axis.title.x = element_text(size = 12)) 
-plot <- plot + theme(axis.text.x = element_text(size = 12))  
-plot <- plot + theme(legend.text = element_text(size = 12))
+plot <- plot + theme(axis.title.x = element_text(size = 18)) 
+plot <- plot + theme(axis.text.x = element_text(size = 18))  
+plot <- plot + theme(legend.text = element_text(size = 20))
 plot <- plot + xlab("Immigrant Population in Census Tract")
 plot
 
@@ -561,7 +591,7 @@ result <- result %>%
 #   y <- subset(df, cob==country)$population
 # 
 #   tau <-0.1
-#   
+# 
 #   data_list <- list(
 #     #Dimensions
 #     N = dim(X)[1],
@@ -580,10 +610,11 @@ result <- result %>%
 #     tau=tau
 #   )
 # 
-#   model <-  stan("./stan_final_models/poisson_horseshoe.stan", data = data_list, chains=4, thin=2,
+#   model <-  stan("./poisson_horseshoe.stan", data = data_list, chains=4, thin=2,
 #                  iter=4000,  seed=1, init = 0)
-#   save(model, file = paste0("./stan_final_models/madrid/model_horseshoe_", country,"_tau0.1_madrid", ".Rdata"))
+#   save(model, file = paste0("/Users/gregbuda/Desktop/TFM/madrid/model_horseshoe_", country,"_tau0.1_madrid", ".Rdata"))
 #   }
+
 
 
 #Initiate a binary matrix where we'll indicate in each setup which are the significant variables
@@ -594,7 +625,7 @@ for (country in c('Italia','Ecuador')) {
   tau_values <- c(0.1)
   for (tau in tau_values) {
     
-    load(paste0("./stan_final_models/madrid/model_horseshoe_", country,"_tau0.1_madrid.Rdata"))
+    load(paste0("/Users/gregbuda/Desktop/TFM/madrid/model_horseshoe_", country,"_tau0.1_madrid.Rdata"))
     
     summary_stats <- summary(model)
     posterior_samples <- rstan::extract(model)
@@ -670,6 +701,51 @@ rowSums(as.matrix(binary_matrix[, 3:25]) == "TRUE")
 #   }
 # }
 
+
+####6.2B BYM without the random effects
+
+for (country in c('Italia','Ecuador')) {
+  X <- subset(df, cob==country)
+  X <- X[, !names(X) %in% c("cusec","cusec_idx", "cob","cob_idx","population","pop_share","overall_density")]
+  X <- scale(X)
+  y <- subset(df, cob==country)$population
+
+  tau_values <- c(0.1)
+  for (tau in tau_values) {
+
+    #Relevant setup
+    setup_vector<-binary_matrix[binary_matrix$country == country & binary_matrix$tau == tau,]
+    #beta0 is significant?
+    beta0_sig <- as.logical(setup_vector[3])
+    #betas; which position indices are significant
+    sig_beta_positions <- which(as.logical(setup_vector[4:25]), arr.ind = TRUE)
+
+    j <- length(unique(df$cusec) )
+
+    #Iterate over 3 possible values of tau
+    data_list <- list(
+      #Dimensions
+      N = dim(X)[1],
+      j = j,
+      p=ncol(X),
+      #Data
+      X = X,
+      y = y,
+      #Indices
+      cusecs_indx = as.integer(subset(df, cob==country)$cusec_idx),
+      betas_to_estimate=as.integer(length(sig_beta_positions)),
+      parameter_indx = as.integer(sig_beta_positions),
+      sig_beta0=as.numeric(beta0_sig)
+    )
+
+    model <-  stan("./poisson_fixed.stan", data = data_list, chains=4, thin=2,
+                   iter=4000,  seed=1, init = 0)
+    save(model, file = paste0("/Users/gregbuda/Desktop/TFM/madrid/model_fixed_", country,"_tau",tau, "_madrid.Rdata"))
+
+  }
+}
+
+
 ###6.3 Effects
 #Italy
 load(paste0("./stan_final_models/madrid/model_car_italia_tau0.1_madrid.Rdata"))
@@ -696,3 +772,11 @@ results <- get_predictives(model)
 results$real <- subset(df, cob=='Ecuador')$population
 results$census_total_pop <- subset(df, cob=='Ecuador')$census_total_pop
 write.csv(results, file = "./predictives/preds_ecuador_madrid.csv", row.names = FALSE)
+
+#Ecuador
+load(paste0("/Users/gregbuda/Desktop/TFM/madrid/model_fixed_Ecuador_tau0.1_madrid.Rdata"))
+results_fixed <- get_predictives_fixed(model)
+results_fixed$real <- subset(df, cob=='Ecuador')$population
+results_fixed$census_total_pop <- subset(df, cob=='Ecuador')$census_total_pop
+results_fixed
+write.csv(results_fixed, file = "./preds_ecuador_madrid_fixed.csv", row.names = FALSE)
